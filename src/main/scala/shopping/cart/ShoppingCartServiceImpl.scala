@@ -1,18 +1,27 @@
 package shopping.cart
-import akka.actor.typed.ActorSystem
+import akka.actor.typed.{ActorSystem, DispatcherSelector}
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.grpc.GrpcServiceException
 import akka.util.Timeout
 import io.grpc.Status
 import org.slf4j.LoggerFactory
-import shopping.cart.proto.{AddItemRequest, AdjustItemQuantityRequest, Cart, CheckoutRequest, GetCartRequest, Item, RemoveItemRequest}
+import shopping.cart.proto.{AddItemRequest, AdjustItemQuantityRequest, Cart, CheckoutRequest, GetCartRequest, GetItemPopularityRequest, GetItemPopularityResponse, Item, RemoveItemRequest}
+import shopping.cart.repository.{ItemPopularityRepository, ScalikeJdbcSession}
 
 import java.util.concurrent.TimeoutException
 import scala.concurrent.Future
 
-class ShoppingCartServiceImpl(system: ActorSystem[_]) extends proto.ShoppingCartService {
+class ShoppingCartServiceImpl(
+  system: ActorSystem[_],
+  itemPopularityRepository: ItemPopularityRepository
+) extends proto.ShoppingCartService {
 
   private val logger = LoggerFactory.getLogger(getClass)
+
+  private val blockingJdbcExecutor =
+    system.dispatchers.lookup(
+      DispatcherSelector.fromConfig("akka.projection.jdbc.blocking-jdbc-dispatcher")
+    )
 
   implicit private val timeout: Timeout = Timeout.create(
     system.settings.config.getDuration("shopping-cart-service.ask-timeout")
@@ -64,6 +73,21 @@ class ShoppingCartServiceImpl(system: ActorSystem[_]) extends proto.ShoppingCart
       }
     }(system.executionContext)
     convertError(response)
+  }
+
+  override def getItemPopularity(
+    in: GetItemPopularityRequest
+  ): Future[GetItemPopularityResponse] = {
+    Future {
+      ScalikeJdbcSession.withSession { session =>
+        itemPopularityRepository.getItem(session, in.itemId)
+      }
+    }(blockingJdbcExecutor).map {
+      case Some(count) =>
+        GetItemPopularityResponse(in.itemId, count)
+      case None =>
+        GetItemPopularityResponse(in.itemId)
+    }(system.executionContext)
   }
 
   private def toProtoCart(cart: ShoppingCart.Summary): Cart =

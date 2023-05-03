@@ -1,7 +1,7 @@
 package shopping.cart
 
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior, SupervisorStrategy}
-import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
+import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityContext, EntityTypeKey}
 import akka.pattern.StatusReply
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior, ReplyEffect, RetentionCriteria}
@@ -46,12 +46,14 @@ object ShoppingCart {
 
   final case class ItemRemoved(
     itemId: String,
-    cartId: String
+    cartId: String,
+    quantity: Int
   ) extends Event
 
   final case class ItemQuantityAdjusted(
     itemId: String,
     cartId: String,
+    oldQuantity: Int,
     newQuantity: Int
   ) extends Event
 
@@ -79,18 +81,25 @@ object ShoppingCart {
 
   val EntityKey: EntityTypeKey[Command] = EntityTypeKey[Command]("ShoppingCart")
 
+  val tags: Seq[String] = Vector.tabulate(5)(i => s"carts-$i")
+
   def init(system: ActorSystem[_]): Unit = {
-    ClusterSharding(system).init(Entity(EntityKey) { entityContext =>
-      ShoppingCart(entityContext.entityId)
-    })
+    val behaviorFactory: EntityContext[Command] => Behavior[Command] = {
+      entityContext =>
+        val i = math.abs(entityContext.entityId.hashCode % tags.size)
+        val selectedTag = tags(i)
+        ShoppingCart(entityContext.entityId, selectedTag)
+    }
+    ClusterSharding(system).init(Entity(EntityKey)(behaviorFactory))
   }
 
-  def apply(cartId: String): Behavior[Command] = {
+  def apply(cartId: String, projectionTag: String): Behavior[Command] = {
     EventSourcedBehavior.withEnforcedReplies[Command, Event, State](
       persistenceId = PersistenceId.ofUniqueId(cartId),
       emptyState = State.empty,
       commandHandler = (state, command) => onCommand(cartId, state, command),
       eventHandler = (state, event) => applyEvent(state, event))
+      .withTagger(_ => Set(projectionTag))
       .withRetention(
         RetentionCriteria
           .snapshotEvery(numberOfEvents = 100, keepNSnapshots = 3))
@@ -138,7 +147,7 @@ object ShoppingCart {
       case RemoveItem(itemId, replyTo) =>
         if (state.hasItem(itemId)) {
           Effect
-            .persist(ItemRemoved(itemId, cartId))
+            .persist(ItemRemoved(itemId, cartId, state.items(itemId)))
             .thenReply(replyTo) { updatedCart =>
               StatusReply.Success(Summary(updatedCart.items, updatedCart.isCheckedOut))
             }
@@ -155,7 +164,8 @@ object ShoppingCart {
           }
         } else if (state.hasItem(itemId)) {
           Effect
-            .persist(ItemQuantityAdjusted(itemId, cartId, quantity))
+            .persist(
+              ItemQuantityAdjusted(itemId, cartId, state.items.getOrElse(itemId, 0), quantity))
             .thenReply(replyTo) { updatedCart =>
               StatusReply.Success(Summary(updatedCart.items, updatedCart.isCheckedOut))
             }
@@ -210,10 +220,10 @@ object ShoppingCart {
       case CheckedOut(_, eventTime) =>
         state.copy(checkoutDate = Some(eventTime))
 
-      case ItemRemoved(itemId, _) =>
+      case ItemRemoved(itemId, _, _) =>
         state.copy(items = state.items - itemId)
 
-      case ItemQuantityAdjusted(itemId, _, newQuantity) =>
+      case ItemQuantityAdjusted(itemId, _, _, newQuantity) =>
         state.updateItem(itemId, newQuantity)
     }
   }
