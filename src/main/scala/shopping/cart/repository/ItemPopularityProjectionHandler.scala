@@ -21,13 +21,13 @@ class ItemPopularityProjectionHandler(
     envelope: EventEnvelope[Event]
   ): Unit = {
     envelope.event match {
-      case ItemAdded(itemId, _, quantity) =>
+      case ItemAdded(_, itemId, quantity) =>
         repository.update(session, itemId, +quantity)
         logItemCount(session, itemId)
-      case ItemRemoved(itemId, _, quantity) =>
+      case ItemRemoved(_, itemId, quantity) =>
         repository.update(session, itemId, -quantity)
         logItemCount(session, itemId)
-      case ItemQuantityAdjusted(itemId, _, oldQuantity, newQuantity) =>
+      case ItemQuantityAdjusted(_, itemId, oldQuantity, newQuantity) =>
         repository.update(session, itemId, + newQuantity - oldQuantity)
       case _: CheckedOut  => ()
     }

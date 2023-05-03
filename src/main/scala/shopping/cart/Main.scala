@@ -37,6 +37,7 @@ object Main {
     ItemPopularityProjection.init(system, itemPopularityRepository)
     ShoppingCartServer.start(grpcInterface, grpcPort, system, grpcService)
     ShoppingCart.init(system)
+    PublishEventsProjection.init(system)
   }
 
 }

@@ -26,7 +26,7 @@ class ShoppingCartSpec
   private val cartId = "testCart"
   private val eventSourcedTestKit = EventSourcedBehaviorTestKit[Command, Event, State](
     system,
-    ShoppingCart(cartId)
+    ShoppingCart(cartId, "test-tag")
   )
 
   override protected def beforeEach(): Unit = {
@@ -38,7 +38,7 @@ class ShoppingCartSpec
     "be able to add an item" in {
       val result = eventSourcedTestKit.runCommand(ShoppingCart.AddItem("foo", 42, _))
       result.reply shouldBe StatusReply.Success(ShoppingCart.Summary(Map("foo" -> 42), isCheckedOut = false))
-      result.event shouldBe ShoppingCart.ItemAdded("foo", cartId, 42)
+      result.event shouldBe ShoppingCart.ItemAdded(cartId, "foo", 42)
       result.state shouldBe ShoppingCart.State(Map("foo" -> 42), None)
     }
 
@@ -47,7 +47,7 @@ class ShoppingCartSpec
       val result = eventSourcedTestKit.runCommand(ShoppingCart.AddItem("bar", 17, _))
 
       result.reply shouldBe StatusReply.Success(ShoppingCart.Summary(Map("foo" -> 42, "bar" -> 17), isCheckedOut = false))
-      result.event shouldBe ShoppingCart.ItemAdded("bar", cartId, 17)
+      result.event shouldBe ShoppingCart.ItemAdded(cartId, "bar", 17)
       result.state shouldBe ShoppingCart.State(Map("foo" -> 42, "bar" -> 17), None)
     }
 
@@ -72,7 +72,7 @@ class ShoppingCartSpec
       val result = eventSourcedTestKit.runCommand(ShoppingCart.RemoveItem("foo", _))
 
       result.reply shouldBe StatusReply.Success(ShoppingCart.Summary(Map.empty, isCheckedOut = false))
-      result.event shouldBe ShoppingCart.ItemRemoved("foo", cartId)
+      result.event shouldBe ShoppingCart.ItemRemoved( cartId, "foo", 42)
       result.state shouldBe ShoppingCart.State.empty
     }
 
@@ -90,7 +90,7 @@ class ShoppingCartSpec
       val result = eventSourcedTestKit.runCommand(ShoppingCart.AdjustItemQuantity("foo", 17, _))
 
       result.reply shouldBe StatusReply.Success(ShoppingCart.Summary(Map("foo" -> 17), isCheckedOut = false))
-      result.event shouldBe ShoppingCart.ItemQuantityAdjusted("foo", cartId, 17)
+      result.event shouldBe ShoppingCart.ItemQuantityAdjusted(cartId, "foo", 42, 17)
       result.state shouldBe ShoppingCart.State(Map("foo" -> 17), None)
     }
 

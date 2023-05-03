@@ -36,23 +36,25 @@ object ShoppingCart {
 
   final case class Summary(items: Map[String, Int], isCheckedOut: Boolean) extends CborSerializable
 
-  sealed trait Event extends CborSerializable
+  sealed trait Event extends CborSerializable {
+    def cartId: String
+  }
 
   final case class ItemAdded(
-    itemId: String,
     cartId: String,
+    itemId: String,
     quantity: Int
   ) extends Event
 
   final case class ItemRemoved(
-    itemId: String,
     cartId: String,
+    itemId: String,
     quantity: Int
   ) extends Event
 
   final case class ItemQuantityAdjusted(
-    itemId: String,
     cartId: String,
+    itemId: String,
     oldQuantity: Int,
     newQuantity: Int
   ) extends Event
@@ -138,7 +140,7 @@ object ShoppingCart {
           )
         } else {
           Effect
-            .persist(ItemAdded(itemId, cartId, quantity))
+            .persist(ItemAdded(cartId, itemId, quantity))
             .thenReply(replyTo) { updatedCart =>
               StatusReply.Success(Summary(updatedCart.items, updatedCart.isCheckedOut))
             }
@@ -147,7 +149,7 @@ object ShoppingCart {
       case RemoveItem(itemId, replyTo) =>
         if (state.hasItem(itemId)) {
           Effect
-            .persist(ItemRemoved(itemId, cartId, state.items(itemId)))
+            .persist(ItemRemoved(cartId, itemId, state.items(itemId)))
             .thenReply(replyTo) { updatedCart =>
               StatusReply.Success(Summary(updatedCart.items, updatedCart.isCheckedOut))
             }
@@ -165,7 +167,7 @@ object ShoppingCart {
         } else if (state.hasItem(itemId)) {
           Effect
             .persist(
-              ItemQuantityAdjusted(itemId, cartId, state.items.getOrElse(itemId, 0), quantity))
+              ItemQuantityAdjusted(cartId, itemId, state.items.getOrElse(itemId, 0), quantity))
             .thenReply(replyTo) { updatedCart =>
               StatusReply.Success(Summary(updatedCart.items, updatedCart.isCheckedOut))
             }
@@ -214,16 +216,16 @@ object ShoppingCart {
 
   private def applyEvent(state: State, event: Event): State = {
     event match {
-      case ItemAdded(itemId, _, quantity) =>
+      case ItemAdded(_, itemId, quantity) =>
         state.updateItem(itemId, quantity)
 
       case CheckedOut(_, eventTime) =>
         state.copy(checkoutDate = Some(eventTime))
 
-      case ItemRemoved(itemId, _, _) =>
+      case ItemRemoved(_, itemId, _) =>
         state.copy(items = state.items - itemId)
 
-      case ItemQuantityAdjusted(itemId, _, _, newQuantity) =>
+      case ItemQuantityAdjusted(_, itemId, _, newQuantity) =>
         state.updateItem(itemId, newQuantity)
     }
   }
