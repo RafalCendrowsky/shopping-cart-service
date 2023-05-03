@@ -5,6 +5,8 @@ target/
 .project
 .classpath
 
+kafka-1-logs/
+
 .idea
 *.iml
 
