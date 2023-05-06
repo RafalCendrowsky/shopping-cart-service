@@ -9,7 +9,7 @@ import shopping.cart.proto.{AddItemRequest, AdjustItemQuantityRequest, Cart, Che
 import shopping.cart.repository.{ItemPopularityRepository, ScalikeJdbcSession}
 
 import java.util.concurrent.TimeoutException
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class ShoppingCartServiceImpl(
   system: ActorSystem[_],
@@ -23,6 +23,7 @@ class ShoppingCartServiceImpl(
       DispatcherSelector.fromConfig("akka.projection.jdbc.blocking-jdbc-dispatcher")
     )
 
+  implicit private val ec: ExecutionContextExecutor = system.executionContext
   implicit private val timeout: Timeout = Timeout.create(
     system.settings.config.getDuration("shopping-cart-service.ask-timeout")
   )
@@ -33,7 +34,7 @@ class ShoppingCartServiceImpl(
     logger.info("addItem {} to cart {}", in.itemId, in.cartId)
     val entityRef = sharding.entityRefFor(ShoppingCart.EntityKey, in.cartId)
     val reply = entityRef.askWithStatus(ShoppingCart.AddItem(in.itemId, in.quantity, _))
-    val response = reply.map(toProtoCart)(system.executionContext)
+    val response = reply.map(toProtoCart)
     convertError(response)
   }
 
@@ -41,7 +42,7 @@ class ShoppingCartServiceImpl(
     logger.info("removeItem {} from cart {}", in.itemId, in.cartId)
     val entityRef = sharding.entityRefFor(ShoppingCart.EntityKey, in.cartId)
     val reply = entityRef.askWithStatus(ShoppingCart.RemoveItem(in.itemId, _))
-    val response = reply.map(toProtoCart)(system.executionContext)
+    val response = reply.map(toProtoCart)
     convertError(response)
   }
 
@@ -49,7 +50,7 @@ class ShoppingCartServiceImpl(
     logger.info("adjustItemQuantity {} to cart {}", in.itemId, in.cartId)
     val entityRef = sharding.entityRefFor(ShoppingCart.EntityKey, in.cartId)
     val reply = entityRef.askWithStatus(ShoppingCart.AdjustItemQuantity(in.itemId, in.quantity, _))
-    val response = reply.map(toProtoCart)(system.executionContext)
+    val response = reply.map(toProtoCart)
     convertError(response)
   }
 
@@ -57,7 +58,7 @@ class ShoppingCartServiceImpl(
     logger.info("checkout cart {}", in.cartId)
     val entityRef = sharding.entityRefFor(ShoppingCart.EntityKey, in.cartId)
     val reply = entityRef.askWithStatus(ShoppingCart.Checkout)
-    val response = reply.map(toProtoCart)(system.executionContext)
+    val response = reply.map(toProtoCart)
     convertError(response)
   }
 
@@ -71,7 +72,7 @@ class ShoppingCartServiceImpl(
       } else {
         toProtoCart(cart)
       }
-    }(system.executionContext)
+    }
     convertError(response)
   }
 
@@ -87,7 +88,7 @@ class ShoppingCartServiceImpl(
         GetItemPopularityResponse(in.itemId, count)
       case None =>
         GetItemPopularityResponse(in.itemId)
-    }(system.executionContext)
+    }
   }
 
   private def toProtoCart(cart: ShoppingCart.Summary): Cart =
@@ -106,6 +107,6 @@ class ShoppingCartServiceImpl(
         Future.failed(
           new GrpcServiceException(
             Status.INVALID_ARGUMENT.withDescription(exc.getMessage)))
-    }(system.executionContext)
+    }
   }
 }
