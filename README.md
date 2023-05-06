@@ -1,3 +1,8 @@
+# Shopping Cart Service
+
+## Description
+Based on a template provided by Lightbend. This service together with shopping-order-service and shopping-analytics-service forms an application responsible for simulating a shopping cart. All the shopping cart logic is implemented by this service, with ordering done by gRPC calls to the shopping-ordering-service and analytics provided to shopping-analytics-service with Akka Projections and Kafka. 
+
 ## Running the sample code
 
 1. Start a first node:
